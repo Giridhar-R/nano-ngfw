@@ -1,0 +1,5 @@
+ID    PROTO SOURCE                 DESTINATION            STATE             PKTS     BYTES
+
+packets                     0
+malformed                   0
+sessions                    0  (active 0, retired 0)

@@ -15,3 +15,14 @@ nano_add_test(test_pcap)
 nano_add_test(test_decode)
 nano_add_test(test_flow)
 nano_add_test(test_tcp_state)
+
+# Golden-output test. Runs the real binary over every fixture and diffs against
+# committed expected output -- which pins the whole pipeline at once, including
+# the things unit tests miss: table ordering, stats formatting, session counting.
+if(Python3_FOUND)
+    add_test(NAME golden
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/run_golden.py"
+                     "$<TARGET_FILE:nano-ngfw>"
+                     "${NANO_CAPTURES_DIR}")
+endif()

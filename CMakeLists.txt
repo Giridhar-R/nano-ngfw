@@ -51,6 +51,7 @@ endif()
 # targets can link the same code the binary runs.
 # ---------------------------------------------------------------------------
 add_library(nano_core STATIC
+    src/cli.cpp
     src/decode.cpp
     src/engine.cpp
     src/flow.cpp

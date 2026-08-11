@@ -14,8 +14,19 @@ void Engine::count_decode_failure(DecodeStatus s) {
     }
 }
 
+void Engine::maybe_sweep(uint64_t now_us) {
+    if (counters_.packets % kSweepInterval == 0) {
+        counters_.sessions_retired += flows_.age_out(now_us, timeouts_);
+    }
+}
+
+void Engine::finish(uint64_t last_ts_us) {
+    counters_.sessions_retired += flows_.age_out(last_ts_us, timeouts_);
+}
+
 void Engine::process(ByteView frame, uint64_t ts_us) {
     ++counters_.packets;
+    maybe_sweep(ts_us);
 
     EthHeader eth;
     ByteView  l3;

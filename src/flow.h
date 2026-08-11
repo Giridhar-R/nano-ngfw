@@ -124,6 +124,31 @@ struct Session {
     uint64_t bytes_s2c = 0;
 };
 
+/// Idle timeouts, per state rather than one global value.
+///
+/// The spread is the interesting part, and each number is an argument:
+///
+///  - SynSeen is short because a half-open session is the cheapest thing an
+///    attacker can make you hold. A SYN flood does not exhaust bandwidth, it
+///    exhausts the session table -- so the state reached by an unanswered SYN is
+///    the one that must expire fastest.
+///  - Established TCP is long because long-lived idle sessions are legitimate.
+///    An SSH connection left open over lunch is not an anomaly, and reaping it
+///    breaks the user's terminal.
+///  - Established UDP is short because there is no close signal. Aging is the
+///    only mechanism that can ever reclaim the entry.
+///  - Closing is short: the conversation is over, only the last ACK is
+///    outstanding, and nothing legitimate will follow it.
+struct Timeouts {
+    uint64_t syn_us             = 5ull * 1000000;
+    uint64_t established_tcp_us = 3600ull * 1000000;
+    uint64_t established_udp_us = 30ull * 1000000;
+    uint64_t closing_us         = 15ull * 1000000;
+
+    /// How long `s` may sit idle before it is reaped.
+    uint64_t for_session(const Session& s) const;
+};
+
 /// Hash table of live conversations.
 ///
 /// Lookup and creation are separate operations rather than one lookup_or_create.
@@ -146,10 +171,28 @@ public:
     /// Applies a packet to an existing session: counters and last-seen.
     void touch(uint32_t id, const PacketMeta& m, bool to_initiator);
 
+    /// Retires sessions idle past their timeout, and every session already in
+    /// Closed. Returns how many were retired.
+    ///
+    /// Retiring means removing the key from the lookup index and marking the
+    /// session Closed; the record itself stays in the vector. A production
+    /// firewall frees the entry -- here the history is the output, and
+    /// `show session all` wants to report conversations that have finished. The
+    /// behaviour that matters is preserved either way: a retired session is no
+    /// longer matchable, so a later packet on the same tuple starts a new one.
+    ///
+    /// `now_us` comes from the capture clock. Passing a wall clock here would
+    /// make replay non-deterministic and break the golden tests.
+    size_t age_out(uint64_t now_us, const Timeouts& t);
+
     Session&       get(uint32_t id)       { return sessions_[id]; }
     const Session& get(uint32_t id) const { return sessions_[id]; }
 
+    /// Every session ever created, retired ones included.
     size_t size() const { return sessions_.size(); }
+
+    /// Sessions still in the lookup index, i.e. those a packet could still match.
+    size_t active() const { return by_key_.size(); }
 
     /// Sessions never move, so iteration order is creation order -- which is what
     /// `show session all` wants.

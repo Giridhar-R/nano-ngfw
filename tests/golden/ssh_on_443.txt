@@ -1,0 +1,7 @@
+ID    PROTO SOURCE                 DESTINATION            STATE             PKTS     BYTES
+0     tcp   192.168.1.10:55000     203.0.113.9:443        ESTABLISHED          4       239
+
+packets                     4
+  ipv4                        4
+malformed                   0
+sessions                    1  (active 1, retired 0)

@@ -32,6 +32,7 @@ struct Counters {
     uint64_t other_l4  = 0;  ///< IP protocols we do not track (ICMP and friends)
 
     uint64_t sessions_created = 0;
+    uint64_t sessions_retired = 0;
 
     /// Packets belonging to no known session that were not allowed to start one.
     ///
@@ -59,8 +60,15 @@ public:
     /// more than picking either behaviour and defending it alone.
     void set_midstream(bool on) { midstream_ = on; }
 
+    void set_timeouts(const Timeouts& t) { timeouts_ = t; }
+
     /// Applies one frame. `ts_us` comes from the capture, never a wall clock.
     void process(ByteView frame, uint64_t ts_us);
+
+    /// Runs a final aging pass. Call once the capture is exhausted so the closing
+    /// state of the table reflects the last timestamp rather than whenever the
+    /// most recent sweep happened to fall.
+    void finish(uint64_t last_ts_us);
 
     const FlowTable& flows() const { return flows_; }
     const Counters&  counters() const { return counters_; }
@@ -68,9 +76,17 @@ public:
 private:
     void count_decode_failure(DecodeStatus s);
     void handle_l4(const Ipv4Header& ip, ByteView l4, uint64_t ts_us, uint32_t frame_bytes);
+    void maybe_sweep(uint64_t now_us);
+
+    /// Packets between aging sweeps. Sweeping per packet would make the run
+    /// quadratic in the session count; sweeping never would let the table grow
+    /// without bound. 128 is small enough that timeouts land close to where they
+    /// should and large enough that the sweep is not on the hot path.
+    static constexpr uint64_t kSweepInterval = 128;
 
     FlowTable flows_;
     Counters  counters_;
+    Timeouts  timeouts_;
     bool      midstream_ = false;
 };
 

@@ -69,6 +69,48 @@ uint32_t FlowTable::create(const PacketMeta& m) {
     return id;
 }
 
+uint64_t Timeouts::for_session(const Session& s) const {
+    switch (s.state) {
+        case SessionState::New:
+        case SessionState::SynSeen:
+        case SessionState::SynAckSeen:
+            return syn_us;
+        case SessionState::Established:
+            return s.proto == 17 ? established_udp_us : established_tcp_us;
+        case SessionState::FinSeen:
+        case SessionState::Closing:
+            return closing_us;
+        case SessionState::Closed:
+            return 0;
+    }
+    return closing_us;
+}
+
+size_t FlowTable::age_out(uint64_t now_us, const Timeouts& t) {
+    size_t retired = 0;
+
+    // A linear sweep of the index. Fine at this scale and called once every N
+    // packets rather than per packet, which keeps it off the hot path -- a sweep
+    // on every packet would be quadratic over the capture. A production dataplane
+    // uses a timer wheel so expiry is O(1); that is a non-goal here, and naming it
+    // is more useful than half-building it.
+    for (auto it = by_key_.begin(); it != by_key_.end();) {
+        Session& s = sessions_[it->second];
+
+        const uint64_t idle    = now_us >= s.last_seen_us ? now_us - s.last_seen_us : 0;
+        const uint64_t allowed = t.for_session(s);
+
+        if (s.state == SessionState::Closed || idle > allowed) {
+            s.state = SessionState::Closed;
+            it      = by_key_.erase(it);
+            ++retired;
+        } else {
+            ++it;
+        }
+    }
+    return retired;
+}
+
 void FlowTable::touch(uint32_t id, const PacketMeta& m, bool to_initiator) {
     Session& s = sessions_[id];
     s.last_seen_us = m.ts_us;
