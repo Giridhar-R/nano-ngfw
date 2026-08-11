@@ -52,6 +52,7 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(nano_core STATIC
     src/decode.cpp
+    src/flow.cpp
     src/pcap.cpp
     src/version.cpp)
 
