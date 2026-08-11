@@ -38,3 +38,44 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config Debug --output-on-failure
+
+  fuzz:
+    name: fuzz-decode
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A short run on every push is not a fuzzing campaign -- it is a regression
+      # check. It catches a reintroduced bounds bug within a minute of the commit
+      # that caused it, which is when the fix is cheapest.
+      - name: Configure
+        run: >
+          cmake -S . -B build-fuzz
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=clang++
+          -DNANO_FUZZ=ON
+
+      - name: Build
+        run: cmake --build build-fuzz --parallel
+
+      # Seeding from the fixtures gives libFuzzer valid frames to mutate, which
+      # reaches the deep paths far faster than starting from random bytes.
+      - name: Seed corpus
+        run: |
+          mkdir -p corpus
+          python3 tests/make_fixtures.py captures
+          cp captures/*.pcap corpus/
+
+      - name: Run
+        run: ./build-fuzz/fuzz/fuzz_decode -max_total_time=60 -print_final_stats=1 corpus/
+
+      - name: Upload crashes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: |
+            crash-*
+            leak-*
+            timeout-*
+          if-no-files-found: ignore

@@ -17,6 +17,7 @@ endif()
 
 option(NANO_WERROR   "Treat warnings as errors"        ON)
 option(NANO_SANITIZE "Enable ASan + UBSan (non-MSVC)"  OFF)
+option(NANO_FUZZ     "Build libFuzzer targets (clang)" OFF)
 
 # ---------------------------------------------------------------------------
 # Shared compile settings, carried by an INTERFACE target so every real target
@@ -99,3 +100,7 @@ endif()
 # ---------------------------------------------------------------------------
 enable_testing()
 add_subdirectory(tests)
+
+if(NANO_FUZZ)
+    add_subdirectory(fuzz)
+endif()

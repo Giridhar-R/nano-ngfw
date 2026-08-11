@@ -77,6 +77,47 @@ struct Ipv4Header {
     bool checksum_ok = false;
 };
 
+/// TCP flag bits, in the order they sit in the byte at offset 13.
+namespace tcp_flag {
+constexpr uint8_t kFin = 0x01;
+constexpr uint8_t kSyn = 0x02;
+constexpr uint8_t kRst = 0x04;
+constexpr uint8_t kPsh = 0x08;
+constexpr uint8_t kAck = 0x10;
+constexpr uint8_t kUrg = 0x20;
+}  // namespace tcp_flag
+
+struct TcpHeader {
+    static constexpr size_t kMinSize = 20;
+
+    uint16_t src_port    = 0;
+    uint16_t dst_port    = 0;
+    uint32_t seq         = 0;
+    uint32_t ack         = 0;
+    uint8_t  data_offset = 0;  ///< header length including options, in bytes
+    uint8_t  flags       = 0;
+    uint16_t window      = 0;
+
+    bool fin() const { return (flags & tcp_flag::kFin) != 0; }
+    bool syn() const { return (flags & tcp_flag::kSyn) != 0; }
+    bool rst() const { return (flags & tcp_flag::kRst) != 0; }
+    bool psh() const { return (flags & tcp_flag::kPsh) != 0; }
+    bool ack_set() const { return (flags & tcp_flag::kAck) != 0; }
+    bool urg() const { return (flags & tcp_flag::kUrg) != 0; }
+
+    /// A SYN with no ACK: the first packet of a connection, and the only thing
+    /// that may create a session when the firewall is running strict.
+    bool pure_syn() const { return syn() && !ack_set(); }
+};
+
+struct UdpHeader {
+    static constexpr size_t kSize = 8;
+
+    uint16_t src_port = 0;
+    uint16_t dst_port = 0;
+    uint16_t length   = 0;  ///< header + payload, as claimed by the sender
+};
+
 /// Why an enum rather than bool: each failure is counted separately in the stats
 /// output, and a spike in one of them is diagnostic. A jump in ShortHeader on
 /// real traffic means the snaplen cut frames short; a jump in BadIhl means the
@@ -100,7 +141,18 @@ DecodeStatus decode_eth(ByteView frame, EthHeader& out, ByteView& payload);
 /// bytes, and a decoder that forgets hands four bytes of zeroes to the TCP layer.
 DecodeStatus decode_ipv4(ByteView pkt, Ipv4Header& out, ByteView& payload);
 
+/// Decodes a TCP segment. `payload` is everything past the header, options
+/// included in the header as the data offset describes.
+DecodeStatus decode_tcp(ByteView seg, TcpHeader& out, ByteView& payload);
+
+/// Decodes a UDP datagram. `payload` is clipped to the length field when that is
+/// shorter than what was captured.
+DecodeStatus decode_udp(ByteView seg, UdpHeader& out, ByteView& payload);
+
 /// Dotted quad, for display only.
 std::string ipv4_to_string(uint32_t addr);
+
+/// "SYN,ACK" / "FIN,ACK" / "-" -- for session and trace output.
+std::string tcp_flags_to_string(uint8_t flags);
 
 }  // namespace nano

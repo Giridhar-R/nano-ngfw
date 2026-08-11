@@ -103,12 +103,75 @@ DecodeStatus decode_ipv4(ByteView pkt, Ipv4Header& out, ByteView& payload) {
     return DecodeStatus::Ok;
 }
 
+DecodeStatus decode_tcp(ByteView seg, TcpHeader& out, ByteView& payload) {
+    if (!seg.has(0, TcpHeader::kMinSize)) return DecodeStatus::ShortHeader;
+
+    out.src_port = seg.u16(0);
+    out.dst_port = seg.u16(2);
+    out.seq      = seg.u32(4);
+    out.ack      = seg.u32(8);
+
+    // The data offset is the same trap as IHL, one layer up: a 4-bit count of
+    // 32-bit words in the high nibble of byte 12. A SYN normally carries MSS,
+    // SACK-permitted, timestamps and window scale, which pushes the header to 40
+    // bytes. Assume 20 and the first bytes of "payload" are actually the option
+    // list -- which is how a TLS parser ends up reading a window scale value as a
+    // record type. captures/tcp_options pins this down.
+    const uint8_t offset_words = static_cast<uint8_t>(seg.u8(12) >> 4);
+    if (offset_words < 5) return DecodeStatus::BadLength;
+
+    const size_t header_bytes = static_cast<size_t>(offset_words) * 4;
+    if (!seg.has(0, header_bytes)) return DecodeStatus::BadLength;
+
+    out.data_offset = static_cast<uint8_t>(header_bytes);
+    out.flags       = seg.u8(13);
+    out.window      = seg.u16(14);
+
+    payload = seg.from(header_bytes);
+    return DecodeStatus::Ok;
+}
+
+DecodeStatus decode_udp(ByteView seg, UdpHeader& out, ByteView& payload) {
+    if (!seg.has(0, UdpHeader::kSize)) return DecodeStatus::ShortHeader;
+
+    out.src_port = seg.u16(0);
+    out.dst_port = seg.u16(2);
+    out.length   = seg.u16(4);
+
+    // The length field covers header plus payload, so anything below 8 is a lie.
+    if (out.length < UdpHeader::kSize) return DecodeStatus::BadLength;
+
+    const size_t claimed   = out.length - UdpHeader::kSize;
+    const size_t available = seg.size() - UdpHeader::kSize;
+    payload = seg.slice(UdpHeader::kSize, claimed < available ? claimed : available);
+    return DecodeStatus::Ok;
+}
+
 std::string ipv4_to_string(uint32_t addr) {
     char buf[16];
     std::snprintf(buf, sizeof buf, "%u.%u.%u.%u",
                   (addr >> 24) & 0xffu, (addr >> 16) & 0xffu,
                   (addr >> 8) & 0xffu, addr & 0xffu);
     return std::string(buf);
+}
+
+std::string tcp_flags_to_string(uint8_t flags) {
+    static constexpr struct {
+        uint8_t     bit;
+        const char* name;
+    } kNames[] = {
+        {tcp_flag::kSyn, "SYN"}, {tcp_flag::kAck, "ACK"}, {tcp_flag::kFin, "FIN"},
+        {tcp_flag::kRst, "RST"}, {tcp_flag::kPsh, "PSH"}, {tcp_flag::kUrg, "URG"},
+    };
+
+    std::string out;
+    for (const auto& n : kNames) {
+        if ((flags & n.bit) != 0) {
+            if (!out.empty()) out += ',';
+            out += n.name;
+        }
+    }
+    return out.empty() ? std::string("-") : out;
 }
 
 }  // namespace nano
