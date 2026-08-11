@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Sanitizers run on the two Linux compilers. Portability across three
+          # toolchains is not decoration -- MSVC, gcc and clang disagree about
+          # integer promotion and signed conversion often enough to catch real
+          # bugs in a codebase that does nothing but reinterpret wire formats.
+          - name: linux-gcc
+            os: ubuntu-latest
+            cmake_args: -DCMAKE_CXX_COMPILER=g++ -DNANO_SANITIZE=ON
+          - name: linux-clang
+            os: ubuntu-latest
+            cmake_args: -DCMAKE_CXX_COMPILER=clang++ -DNANO_SANITIZE=ON
+          - name: windows-msvc
+            os: windows-latest
+            cmake_args: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug ${{ matrix.cmake_args }}
+
+      - name: Build
+        run: cmake --build build --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build --build-config Debug --output-on-failure
