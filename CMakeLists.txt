@@ -50,6 +50,7 @@ endif()
 # targets can link the same code the binary runs.
 # ---------------------------------------------------------------------------
 add_library(nano_core STATIC
+    src/decode.cpp
     src/pcap.cpp
     src/version.cpp)
 

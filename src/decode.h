@@ -1,0 +1,106 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+
+#include "byteview.h"
+
+namespace nano {
+
+// ---------------------------------------------------------------------------
+// Why this file parses by offset instead of casting a struct over the buffer
+//
+// The tempting version is a #pragma pack struct and a reinterpret_cast. It is
+// wrong three ways: the cast violates strict aliasing and assumes an alignment
+// the buffer does not promise, it does nothing about byte order so every field
+// needs swapping anyway, and it hides the offsets -- which are the thing worth
+// knowing. Reading fields explicitly costs a few lines and is correct on every
+// compiler in the CI matrix.
+//
+// Every decoder is total: it either reports a structured failure or produces a
+// header whose payload view is guaranteed in range. Nothing here can read past
+// the end of the frame, which is the property the fuzzer exists to check.
+// ---------------------------------------------------------------------------
+
+enum class EtherType : uint16_t {
+    Ipv4 = 0x0800,
+    Arp  = 0x0806,
+    Vlan = 0x8100,
+    Ipv6 = 0x86DD,
+};
+
+enum class IpProto : uint8_t {
+    Icmp = 1,
+    Tcp  = 6,
+    Udp  = 17,
+};
+
+/// Ethernet II. MAC pointers alias the frame rather than copying it -- they are
+/// only used for display, and they inherit the frame's lifetime.
+struct EthHeader {
+    static constexpr size_t kSize = 14;
+
+    const uint8_t* dst       = nullptr;  ///< 6 bytes
+    const uint8_t* src       = nullptr;  ///< 6 bytes
+    uint16_t       ethertype = 0;
+};
+
+struct Ipv4Header {
+    uint8_t  ihl_bytes    = 0;   ///< header length including options, in bytes
+    uint8_t  ttl          = 0;
+    uint8_t  protocol     = 0;
+    uint16_t total_length = 0;
+    uint16_t ident        = 0;
+    uint16_t frag_offset  = 0;   ///< in bytes, not the raw 8-byte units
+    bool     dont_fragment = false;
+    bool     more_fragments = false;
+    uint32_t src = 0;
+    uint32_t dst = 0;
+
+    /// True for every fragment except the first.
+    ///
+    /// It matters because a non-first fragment carries no L4 header: the bytes
+    /// where a TCP source port would be are payload from the middle of a
+    /// segment. A decoder that misses this classifies noise as ports, which is
+    /// the basis of a whole family of fragment evasion attacks. The pipeline
+    /// stops at L3 for these -- reassembly is an explicit non-goal.
+    bool later_fragment() const { return frag_offset > 0; }
+
+    bool fragmented() const { return more_fragments || frag_offset > 0; }
+
+    /// Checksum verification is reported, not enforced.
+    ///
+    /// Structural decoding succeeds regardless, because the distinction is worth
+    /// counting separately: a malformed header is a parser problem, a bad
+    /// checksum is a corruption problem, and captures taken on a host with
+    /// checksum offload are full of the latter by design.
+    bool checksum_ok = false;
+};
+
+/// Why an enum rather than bool: each failure is counted separately in the stats
+/// output, and a spike in one of them is diagnostic. A jump in ShortHeader on
+/// real traffic means the snaplen cut frames short; a jump in BadIhl means the
+/// parser is walking off the rails.
+enum class DecodeStatus : uint8_t {
+    Ok,
+    ShortHeader,   ///< fewer bytes than the fixed header needs
+    BadVersion,    ///< IP version nibble was not 4
+    BadIhl,        ///< IHL below 5, or claiming more than the frame holds
+    BadLength,     ///< total_length/data offset inconsistent with what we have
+};
+
+const char* to_string(DecodeStatus s);
+
+/// Decodes an Ethernet II frame. `payload` is set to everything after the
+/// 14-byte header. Returns ShortHeader for a runt.
+DecodeStatus decode_eth(ByteView frame, EthHeader& out, ByteView& payload);
+
+/// Decodes an IPv4 packet. `payload` is the L4 segment, clipped to total_length
+/// when the frame carries trailing padding -- Ethernet pads anything under 60
+/// bytes, and a decoder that forgets hands four bytes of zeroes to the TCP layer.
+DecodeStatus decode_ipv4(ByteView pkt, Ipv4Header& out, ByteView& payload);
+
+/// Dotted quad, for display only.
+std::string ipv4_to_string(uint32_t addr);
+
+}  // namespace nano

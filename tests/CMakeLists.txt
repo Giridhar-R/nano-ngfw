@@ -12,3 +12,4 @@ endfunction()
 
 nano_add_test(test_byteview)
 nano_add_test(test_pcap)
+nano_add_test(test_decode)
