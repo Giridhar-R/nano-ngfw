@@ -50,6 +50,7 @@ endif()
 # targets can link the same code the binary runs.
 # ---------------------------------------------------------------------------
 add_library(nano_core STATIC
+    src/pcap.cpp
     src/version.cpp)
 
 target_include_directories(nano_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -59,6 +60,40 @@ target_link_libraries(nano_core PUBLIC nano_flags)
 # ---------------------------------------------------------------------------
 add_executable(nano-ngfw src/main.cpp)
 target_link_libraries(nano-ngfw PRIVATE nano_core)
+
+# ---------------------------------------------------------------------------
+# Test fixtures.
+#
+# The pcaps are generated rather than committed: tests/make_fixtures.py is the
+# source of truth, so a fixture can be read and reviewed as code instead of
+# inspected as an opaque blob. Generating at configure time keeps a fresh clone
+# one `cmake` away from a runnable test suite.
+# ---------------------------------------------------------------------------
+set(NANO_CAPTURES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/captures")
+
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/make_fixtures.py"
+                "${NANO_CAPTURES_DIR}"
+        RESULT_VARIABLE nano_fixture_result
+        OUTPUT_VARIABLE nano_fixture_output)
+    if(NOT nano_fixture_result EQUAL 0)
+        message(FATAL_ERROR "fixture generation failed: ${nano_fixture_output}")
+    endif()
+    message(STATUS "nano-ngfw: ${nano_fixture_output}")
+
+    # Also expose it as a target, for regenerating after editing the generator.
+    add_custom_target(fixtures
+        COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/make_fixtures.py"
+                "${NANO_CAPTURES_DIR}"
+        COMMENT "Regenerating pcap fixtures")
+else()
+    message(WARNING "Python3 not found -- pcap fixtures cannot be generated and "
+                    "the capture-driven tests will fail.")
+endif()
 
 # ---------------------------------------------------------------------------
 enable_testing()
