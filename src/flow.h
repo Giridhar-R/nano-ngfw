@@ -110,6 +110,11 @@ struct Session {
 
     SessionState state = SessionState::New;
 
+    /// Which side closed first. Only meaningful from FinSeen onwards, and the
+    /// reason FinSeen -> Closing needs to distinguish "the other end has now
+    /// closed too" from "that was a retransmitted FIN from the same end".
+    bool fin_from_initiator = false;
+
     uint64_t first_seen_us = 0;
     uint64_t last_seen_us  = 0;
 

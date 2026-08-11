@@ -52,8 +52,10 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(nano_core STATIC
     src/decode.cpp
+    src/engine.cpp
     src/flow.cpp
     src/pcap.cpp
+    src/tcp_state.cpp
     src/version.cpp)
 
 target_include_directories(nano_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
