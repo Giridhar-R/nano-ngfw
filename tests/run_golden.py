@@ -30,10 +30,22 @@ GOLDEN_DIR = os.path.join(HERE, "golden")
 # which the unit tests already cover, and the binary exits non-zero on them.
 SKIP = {"bad_magic.pcap", "huge_record.pcap"}
 
-# A couple of fixtures are worth running twice, because the interesting behaviour
-# is the difference between the two modes.
+POLICY = os.path.join(HERE, os.pardir, "rules", "policy.conf")
+
+# Some fixtures are worth running more than once, because the interesting
+# behaviour is the *difference* between two runs of the same input.
+#
+#  - out_of_state, strict vs --midstream: one session or none, from one packet.
+#    The clearest two-line statement of what stateful means.
+#  - ssh_on_443 and tls_sni under the shipped rule base: identical ports,
+#    identical rule, opposite verdicts. The App-ID shift, pinned so a refactor
+#    cannot quietly break the project's headline claim.
 EXTRA_ARGS = {
     "out_of_state.pcap": [("midstream", ["--midstream"])],
+    "ssh_on_443.pcap":   [("policy", ["--policy", POLICY, "--session", "0"])],
+    "tls_sni.pcap":      [("policy", ["--policy", POLICY, "--session", "0"])],
+    "handshake_clean.pcap": [("nat", ["--policy", POLICY, "--nat", "203.0.113.5",
+                                      "--session", "0"])],
 }
 
 

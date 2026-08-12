@@ -1,5 +1,6 @@
-ID    PROTO SOURCE                 DESTINATION            STATE             PKTS     BYTES
+ID   APP                FROM     TO       SOURCE                 DESTINATION            STATE        ACTION
 
 packets                     0
 malformed                   0
 sessions                    0  (active 0, retired 0)
+verdicts           allow 0  deny 0  drop 0

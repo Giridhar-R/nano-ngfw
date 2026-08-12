@@ -1,0 +1,12 @@
+Session 0
+  application  : ssl
+  sni          : www.google.com
+  protocol     : tcp
+  initiator    : 192.168.1.10:52344 (trust)
+  responder    : 142.250.183.14:443 (untrust)
+  state        : ESTABLISHED
+  rule         : allow-web
+  action       : allow
+  c2s          : 3 packets, 237 bytes
+  s2c          : 1 packets, 54 bytes
+  duration     : 0.000030 s

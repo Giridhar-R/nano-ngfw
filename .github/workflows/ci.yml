@@ -66,8 +66,14 @@ jobs:
           python3 tests/make_fixtures.py captures
           cp captures/*.pcap corpus/
 
-      - name: Run
+      - name: Run decode fuzzer
         run: ./build-fuzz/fuzz/fuzz_decode -max_total_time=60 -print_final_stats=1 corpus/
+
+      # The TLS walk gets its own budget. It is the most dangerous parser here --
+      # four nested length-prefixed structures, each one trusting a length the
+      # peer chose -- and it would barely be reached through the decode target.
+      - name: Run TLS fuzzer
+        run: ./build-fuzz/fuzz/fuzz_tls -max_total_time=60 -print_final_stats=1
 
       - name: Upload crashes
         if: failure()

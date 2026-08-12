@@ -1,0 +1,12 @@
+Session 0
+  application  : ssh
+  protocol     : tcp
+  initiator    : 192.168.1.10:55000 (trust)
+  responder    : 203.0.113.9:443 (untrust)
+  state        : CLOSED
+  rule         : (implicit default deny)
+  action       : deny
+  app-id shift : yes -- re-evaluated as ssh after identification
+  c2s          : 2 packets, 108 bytes
+  s2c          : 2 packets, 131 bytes
+  duration     : 0.000030 s

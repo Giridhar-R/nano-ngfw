@@ -5,6 +5,7 @@
 #include "byteview.h"
 #include "decode.h"
 #include "flow.h"
+#include "nat.h"
 
 namespace nano {
 
@@ -34,6 +35,13 @@ struct Counters {
     uint64_t sessions_created = 0;
     uint64_t sessions_retired = 0;
 
+    uint64_t allowed = 0;
+    uint64_t denied  = 0;
+    uint64_t dropped = 0;
+
+    /// Sessions whose verdict changed once the application was identified.
+    uint64_t app_shifts = 0;
+
     /// Packets belonging to no known session that were not allowed to start one.
     ///
     /// The number that makes the firewall stateful. In strict mode a bare ACK for
@@ -50,6 +58,11 @@ struct Counters {
 /// Drives one capture through decode, flow lookup and the state machine.
 class Engine {
 public:
+    Engine() { policy_.load_default(); }
+
+    Policy&       policy()       { return policy_; }
+    const Policy& policy() const { return policy_; }
+
     /// Midstream pickup: adopt a session from a non-SYN packet.
     ///
     /// Off by default, because refusing is what statefulness means. It exists
@@ -61,6 +74,9 @@ public:
     void set_midstream(bool on) { midstream_ = on; }
 
     void set_timeouts(const Timeouts& t) { timeouts_ = t; }
+
+    /// Turns on source NAT for allowed trust -> untrust sessions.
+    void set_nat(const NatPool& pool) { nat_ = pool; }
 
     /// Applies one frame. `ts_us` comes from the capture, never a wall clock.
     void process(ByteView frame, uint64_t ts_us);
@@ -78,6 +94,14 @@ private:
     void handle_l4(const Ipv4Header& ip, ByteView l4, uint64_t ts_us, uint32_t frame_bytes);
     void maybe_sweep(uint64_t now_us);
 
+    /// Runs App-ID against a payload and, if it decides, re-evaluates policy.
+    void classify_and_maybe_shift(Session& s, ByteView payload, uint16_t dst_port);
+
+    /// Payload bytes to wait for before giving up on identifying a session.
+    /// Every protocol worth naming announces itself in the first packet or two;
+    /// beyond this the session is called unknown so it stops being reconsidered.
+    static constexpr uint32_t kMaxL7Bytes = 4096;
+
     /// Packets between aging sweeps. Sweeping per packet would make the run
     /// quadratic in the session count; sweeping never would let the table grow
     /// without bound. 128 is small enough that timeouts land close to where they
@@ -85,6 +109,8 @@ private:
     static constexpr uint64_t kSweepInterval = 128;
 
     FlowTable flows_;
+    Policy    policy_;
+    NatPool   nat_;
     Counters  counters_;
     Timeouts  timeouts_;
     bool      midstream_ = false;

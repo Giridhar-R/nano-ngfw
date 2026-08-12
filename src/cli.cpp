@@ -29,18 +29,19 @@ void line_if(std::FILE* out, const char* label, uint64_t value) {
 }  // namespace
 
 void print_sessions(std::FILE* out, const Engine& e) {
-    std::fprintf(out, "%-5s %-5s %-22s %-22s %-12s %9s %9s\n",
-                 "ID", "PROTO", "SOURCE", "DESTINATION", "STATE", "PKTS", "BYTES");
+    std::fprintf(out, "%-4s %-18s %-8s %-8s %-22s %-22s %-12s %-6s\n",
+                 "ID", "APP", "FROM", "TO", "SOURCE", "DESTINATION", "STATE", "ACTION");
 
     for (const Session& s : e.flows().all()) {
-        std::fprintf(out, "%-5u %-5s %-22s %-22s %-12s %9llu %9llu\n",
+        std::fprintf(out, "%-4u %-18s %-8s %-8s %-22s %-22s %-12s %-6s\n",
                      s.id,
-                     proto_name(s.proto),
+                     s.app_display(),
+                     to_string(s.from_zone),
+                     to_string(s.to_zone),
                      endpoint(s.init_ip, s.init_port).c_str(),
                      endpoint(s.resp_ip, s.resp_port).c_str(),
                      to_string(s.state),
-                     static_cast<unsigned long long>(s.pkts_c2s + s.pkts_s2c),
-                     static_cast<unsigned long long>(s.bytes_c2s + s.bytes_s2c));
+                     to_string(s.verdict));
     }
 }
 
@@ -51,11 +52,32 @@ void print_session_detail(std::FILE* out, const Engine& e, uint32_t id) {
     }
 
     const Session& s = e.flows().get(id);
+    const Rule*    rule = e.policy().rule_at(s.matched_rule);
+
     std::fprintf(out, "Session %u\n", s.id);
+    std::fprintf(out, "  application  : %s\n", s.app_display());
+    if (!s.sni.empty()) {
+        std::fprintf(out, "  sni          : %s\n", s.sni.c_str());
+    }
     std::fprintf(out, "  protocol     : %s\n", proto_name(s.proto));
-    std::fprintf(out, "  initiator    : %s\n", endpoint(s.init_ip, s.init_port).c_str());
-    std::fprintf(out, "  responder    : %s\n", endpoint(s.resp_ip, s.resp_port).c_str());
+    std::fprintf(out, "  initiator    : %s (%s)\n",
+                 endpoint(s.init_ip, s.init_port).c_str(), to_string(s.from_zone));
+    std::fprintf(out, "  responder    : %s (%s)\n",
+                 endpoint(s.resp_ip, s.resp_port).c_str(), to_string(s.to_zone));
     std::fprintf(out, "  state        : %s\n", to_string(s.state));
+    std::fprintf(out, "  rule         : %s\n", rule != nullptr ? rule->name.c_str()
+                                                               : "(implicit default deny)");
+    std::fprintf(out, "  action       : %s\n", to_string(s.verdict));
+    if (s.app_shifted) {
+        // The line the whole App-ID design exists to produce.
+        std::fprintf(out, "  app-id shift : yes -- re-evaluated as %s after identification\n",
+                     s.app.c_str());
+    }
+    if (s.nat_applied) {
+        std::fprintf(out, "  nat          : %s -> %s (source PAT)\n",
+                     endpoint(s.init_ip, s.init_port).c_str(),
+                     endpoint(s.nat_ip, s.nat_port).c_str());
+    }
     std::fprintf(out, "  c2s          : %llu packets, %llu bytes\n",
                  static_cast<unsigned long long>(s.pkts_c2s),
                  static_cast<unsigned long long>(s.bytes_c2s));
@@ -96,6 +118,12 @@ void print_stats(std::FILE* out, const Engine& e) {
                  static_cast<unsigned long long>(e.flows().active()),
                  static_cast<unsigned long long>(c.sessions_retired));
     line_if(out, "out-of-state", c.out_of_state);
+
+    std::fprintf(out, "verdicts           allow %llu  deny %llu  drop %llu\n",
+                 static_cast<unsigned long long>(c.allowed),
+                 static_cast<unsigned long long>(c.denied),
+                 static_cast<unsigned long long>(c.dropped));
+    line_if(out, "app-id shifts", c.app_shifts);
 }
 
 }  // namespace nano

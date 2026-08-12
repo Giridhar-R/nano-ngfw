@@ -1,6 +1,27 @@
 #include "flow.h"
 
+#include "appid.h"
+
 namespace nano {
+
+const char* Session::app_display() const {
+    if (app_latched) return app.c_str();
+
+    // Not latched yet, and *why* is worth distinguishing -- both of these are
+    // real PAN-OS session states.
+    //
+    // A handshake that never completed means no payload was ever exchanged, so
+    // there was nothing to classify. An established session with no verdict means
+    // the classifier has simply not seen enough bytes yet.
+    switch (state) {
+        case SessionState::New:
+        case SessionState::SynSeen:
+        case SessionState::SynAckSeen:
+            return app::kIncomplete;
+        default:
+            return app::kInsufficientData;
+    }
+}
 
 FiveTuple FiveTuple::make(uint32_t src_ip, uint16_t src_port,
                           uint32_t dst_ip, uint16_t dst_port, uint8_t proto) {

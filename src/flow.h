@@ -1,8 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "policy.h"
 
 namespace nano {
 
@@ -117,6 +120,39 @@ struct Session {
 
     uint64_t first_seen_us = 0;
     uint64_t last_seen_us  = 0;
+
+    // --- policy ------------------------------------------------------------
+    Zone from_zone = Zone::Any;
+    Zone to_zone   = Zone::Any;
+
+    /// Index into the rule base, or Policy::kDefaultDeny.
+    int     matched_rule = Policy::kDefaultDeny;
+    Verdict verdict      = Verdict::Deny;
+
+    // --- App-ID --------------------------------------------------------------
+    /// Identified application. Empty until latched; the display layer turns that
+    /// into "incomplete" or "insufficient-data" depending on why.
+    std::string app;
+    bool        app_latched   = false;
+    uint32_t    l7_bytes_seen = 0;
+
+    /// SNI hostname, copied out of the ClientHello because it must outlive the
+    /// packet that carried it.
+    std::string sni;
+
+    /// The verdict changed when the application was identified -- the session was
+    /// admitted as one thing and turned out to be another. The App-ID shift.
+    bool app_shifted = false;
+
+    /// What the session should be shown as, including the two pre-decision states.
+    const char* app_display() const;
+
+    // --- NAT -----------------------------------------------------------------
+    /// The translation lives on the session because the NAT table and the session
+    /// table are the same table -- see nat.h.
+    bool     nat_applied = false;
+    uint32_t nat_ip      = 0;
+    uint16_t nat_port    = 0;
 
     uint64_t pkts_c2s  = 0;
     uint64_t pkts_s2c  = 0;

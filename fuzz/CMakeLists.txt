@@ -24,3 +24,4 @@ function(nano_add_fuzzer name)
 endfunction()
 
 nano_add_fuzzer(fuzz_decode)
+nano_add_fuzzer(fuzz_tls)

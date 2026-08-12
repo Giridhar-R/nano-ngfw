@@ -1,9 +1,10 @@
-ID    PROTO SOURCE                 DESTINATION            STATE             PKTS     BYTES
-0     tcp   192.168.1.10:52341     93.184.216.34:80       SYN-SEEN             1        54
+ID   APP                FROM     TO       SOURCE                 DESTINATION            STATE        ACTION
+0    incomplete         trust    untrust  192.168.1.10:52341     93.184.216.34:80       SYN-SEEN     allow 
 
 packets                     1
   ipv4                        1
 malformed                   0
 sessions                    1  (active 1, retired 0)
+verdicts           allow 1  deny 0  drop 0
 
 warning: capture ends mid-record

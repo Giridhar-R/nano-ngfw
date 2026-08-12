@@ -1,7 +1,8 @@
-ID    PROTO SOURCE                 DESTINATION            STATE             PKTS     BYTES
-0     udp   192.168.1.10:53122     8.8.8.8:53             ESTABLISHED          2       166
+ID   APP                FROM     TO       SOURCE                 DESTINATION            STATE        ACTION
+0    dns                trust    untrust  192.168.1.10:53122     8.8.8.8:53             ESTABLISHED  allow 
 
 packets                     2
   ipv4                        2
 malformed                   0
 sessions                    1  (active 1, retired 0)
+verdicts           allow 1  deny 0  drop 0

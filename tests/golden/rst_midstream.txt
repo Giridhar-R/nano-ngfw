@@ -1,7 +1,8 @@
-ID    PROTO SOURCE                 DESTINATION            STATE             PKTS     BYTES
-0     tcp   192.168.1.10:52341     93.184.216.34:80       CLOSED               4       216
+ID   APP                FROM     TO       SOURCE                 DESTINATION            STATE        ACTION
+0    insufficient-data  trust    untrust  192.168.1.10:52341     93.184.216.34:80       CLOSED       allow 
 
 packets                     4
   ipv4                        4
 malformed                   0
 sessions                    1  (active 0, retired 1)
+verdicts           allow 1  deny 0  drop 0

@@ -1,5 +1,8 @@
 #include "engine.h"
 
+#include <string>
+
+#include "appid.h"
 #include "tcp_state.h"
 
 namespace nano {
@@ -123,6 +126,41 @@ void Engine::handle_l4(const Ipv4Header& ip, ByteView l4, uint64_t ts_us,
         id = flows_.create(m);
         ++counters_.sessions_created;
         to_initiator = false;  // by construction, the creating packet is c2s
+
+        // The one and only policy call site.
+        //
+        // This is what "stateful" means in code. A stateless ACL asks "is this
+        // packet allowed?" for every packet; here the question is asked once, of
+        // the session, on its first packet. Every subsequent packet -- including
+        // every packet of the return direction -- is forwarded on the strength of
+        // the session existing. That is why no inbound rule is needed for the
+        // server's SYN+ACK, and why anyone tempted to call evaluate() from the
+        // per-packet path has misunderstood the design.
+        Session& created = flows_.get(id);
+        created.from_zone = policy_.zone_for(m.src_ip);
+        created.to_zone   = policy_.zone_for(m.dst_ip);
+        created.matched_rule = policy_.evaluate(created.from_zone, created.to_zone,
+                                                m.proto, m.dst_port,
+                                                std::string(), created.verdict);
+        switch (created.verdict) {
+            case Verdict::Allow: ++counters_.allowed; break;
+            case Verdict::Deny:  ++counters_.denied;  break;
+            case Verdict::Drop:  ++counters_.dropped; break;
+        }
+
+        // NAT is applied after policy, and only to traffic that was allowed --
+        // there is no point allocating a binding for a session about to be
+        // dropped. Outbound only: trust -> untrust is the direction that needs an
+        // address it does not have.
+        if (created.verdict == Verdict::Allow && nat_.enabled() &&
+            created.from_zone == Zone::Trust && created.to_zone == Zone::Untrust) {
+            uint16_t translated = 0;
+            if (nat_.allocate(translated)) {
+                created.nat_applied = true;
+                created.nat_ip      = nat_.public_ip();
+                created.nat_port    = translated;
+            }
+        }
     }
 
     flows_.touch(id, m, to_initiator);
@@ -132,6 +170,73 @@ void Engine::handle_l4(const Ipv4Header& ip, ByteView l4, uint64_t ts_us,
         tcp_advance(s, tcp.flags, to_initiator);
     } else {
         udp_advance(s);
+    }
+
+    if (!s.app_latched && !payload.empty()) {
+        // Classify against the destination port of the *client's* direction, so
+        // return traffic is still judged against the service the session is for.
+        classify_and_maybe_shift(s, payload, to_initiator ? s.resp_port : m.dst_port);
+    }
+}
+
+void Engine::classify_and_maybe_shift(Session& s, ByteView payload, uint16_t dst_port) {
+    s.l7_bytes_seen += static_cast<uint32_t>(payload.size());
+
+    const AppIdResult result = classify(payload, s.proto, dst_port);
+
+    if (result.application.empty()) {
+        // Undecided. Keep waiting unless the payload was recognisably nothing we
+        // know, or we have simply seen enough.
+        if (!result.exhausted && s.l7_bytes_seen < kMaxL7Bytes) return;
+        s.app = app::kUnknown;
+    } else {
+        s.app = result.application;
+        if (!result.sni.empty()) s.sni = result.sni;
+    }
+    s.app_latched = true;
+
+    // --- the App-ID shift ---------------------------------------------------
+    //
+    // The timing problem this resolves is real, not academic. Policy was decided
+    // on the session's first packet, when the only thing known about it was a
+    // port -- which is precisely the thing an NGFW claims not to trust. The
+    // application is not knowable until payload arrives, several packets later.
+    //
+    // So policy is evaluated a second time, now with the application in hand. If
+    // the answer changes, the session was admitted under one identity and turned
+    // out to have another: SSH wearing port 443 is allowed by a rule for web
+    // traffic, then reclassified and torn down. PAN-OS calls this an App-ID shift
+    // and handles it the same way.
+    const Verdict before = s.verdict;
+
+    Verdict   after     = before;
+    const int new_rule  = policy_.evaluate(s.from_zone, s.to_zone, s.proto,
+                                           s.resp_port, s.app, after);
+
+    s.matched_rule = new_rule;
+    s.verdict      = after;
+
+    if (after != before) {
+        s.app_shifted = true;
+        ++counters_.app_shifts;
+
+        // The verdict counters track sessions, so move this one across rather
+        // than counting it twice.
+        switch (before) {
+            case Verdict::Allow: --counters_.allowed; break;
+            case Verdict::Deny:  --counters_.denied;  break;
+            case Verdict::Drop:  --counters_.dropped; break;
+        }
+        switch (after) {
+            case Verdict::Allow: ++counters_.allowed; break;
+            case Verdict::Deny:  ++counters_.denied;  break;
+            case Verdict::Drop:  ++counters_.dropped; break;
+        }
+
+        // A session that has lost its rule is torn down, not merely marked.
+        if (after != Verdict::Allow) {
+            s.state = SessionState::Closed;
+        }
     }
 }
 

@@ -1,0 +1,12 @@
+Session 0
+  application  : web-browsing
+  protocol     : tcp
+  initiator    : 192.168.1.10:52341 (trust)
+  responder    : 93.184.216.34:80 (untrust)
+  state        : CLOSED
+  rule         : allow-web
+  action       : allow
+  nat          : 192.168.1.10:52341 -> 203.0.113.5:40000 (source PAT)
+  c2s          : 5 packets, 348 bytes
+  s2c          : 3 packets, 202 bytes
+  duration     : 2.000020 s
