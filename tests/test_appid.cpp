@@ -54,6 +54,36 @@ void test_ssh_is_recognised_by_its_banner() {
     CHECK_EQ(result.application, std::string(app::kSsh));
 }
 
+/// DNS is the weakest signature here and the only one still gated on a port.
+///
+/// A query has no magic bytes, so classification checks structural plausibility
+/// instead -- one question, a sane opcode, and a QNAME that parses as
+/// length-prefixed labels. That is not strong enough to claim on an arbitrary
+/// port without inviting false positives on anything binary, which is why the
+/// port still matters here and nowhere else.
+void test_dns_is_shape_plus_port() {
+    std::vector<uint8_t> query = {
+        0x12, 0x34,              // transaction id
+        0x01, 0x00,              // standard query, recursion desired
+        0x00, 0x01,              // one question
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x03, 'w', 'w', 'w',
+        0x07, 'e', 'x', 'a', 'm', 'p', 'l', 'e',
+        0x03, 'c', 'o', 'm',
+        0x00,                    // end of name
+        0x00, 0x01, 0x00, 0x01,  // qtype A, qclass IN
+    };
+
+    CHECK_EQ(classify(view_of(query), kUdp, 53).application, std::string(app::kDns));
+
+    // Same bytes, non-standard port: not claimed.
+    CHECK(classify(view_of(query), kUdp, 9999).application.empty());
+
+    // Right port, payload that is not a DNS message.
+    const auto junk = bytes_of("this is not dns");
+    CHECK(classify(view_of(junk), kUdp, 53).application.empty());
+}
+
 void test_unrecognised_payload_is_exhausted_not_pending() {
     const auto payload = bytes_of("\x01\x02\x03 random bytes that are nothing");
     const auto result  = classify(view_of(payload), kTcp, 9999);
@@ -254,6 +284,7 @@ rule allow-web from trust to untrust service tcp/80,tcp/443 application web-brow
 int main() {
     test_http_is_recognised_by_its_request_line();
     test_ssh_is_recognised_by_its_banner();
+    test_dns_is_shape_plus_port();
     test_unrecognised_payload_is_exhausted_not_pending();
     test_empty_payload_is_pending();
 
