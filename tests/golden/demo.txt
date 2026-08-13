@@ -1,0 +1,15 @@
+ID   APP                FROM     TO       SOURCE                 DESTINATION            STATE        ACTION
+0    web-browsing       trust    untrust  192.168.1.10:52341     93.184.216.34:80       ESTABLISHED  allow 
+1    ssl                trust    untrust  192.168.1.10:52344     142.250.183.14:443     ESTABLISHED  allow 
+2    ssh                trust    untrust  192.168.1.10:55000     203.0.113.9:443        ESTABLISHED  allow 
+3    dns                trust    untrust  192.168.1.10:53122     8.8.8.8:53             ESTABLISHED  allow 
+4    incomplete         trust    untrust  192.168.1.22:41000     198.51.100.7:23        SYN-SEEN     allow 
+5    incomplete         untrust  trust    203.0.113.44:40000     192.168.1.10:445       SYN-SEEN     drop  
+6    web-browsing       trust    untrust  192.168.1.10:52400     93.184.216.34:80       CLOSED       allow 
+
+packets                    25
+  ipv4                       25
+malformed                   0
+sessions                    7  (active 6, retired 1)
+  out-of-state                1
+verdicts           allow 6  deny 0  drop 1

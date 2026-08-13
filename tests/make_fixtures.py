@@ -302,6 +302,69 @@ def f_big_endian() -> list[tuple[int, bytes]]:
     return f_handshake_clean()
 
 
+def f_demo() -> list[tuple[int, bytes]]:
+    """Everything interesting in one capture, for the HTML report.
+
+    Eight conversations chosen so the session table shows every verdict and both
+    of the behaviours that distinguish this from a packet filter: an App-ID shift
+    tearing down a session admitted by port, and an out-of-state packet refused
+    for belonging to no session at all.
+
+    Timestamps are spread over a few seconds so the report's durations look like
+    traffic rather than like a test.
+    """
+    p: list[tuple[int, bytes]] = []
+
+    def handshake(cip, cport, sip, sport, t, cseq=1000, sseq=5000):
+        p.append((t, eth(tcp(b"", cip, sip, cport, sport, cseq, 0, SYN))))
+        p.append((t + 8000, eth(tcp(b"", sip, cip, sport, cport, sseq, cseq + 1, SYN | ACK))))
+        p.append((t + 15000, eth(tcp(b"", cip, sip, cport, sport, cseq + 1, sseq + 1, ACK))))
+
+    # 1. Ordinary web browsing -- identified as web-browsing, allowed.
+    handshake(C, 52341, S, 80, 1 * US)
+    p.append((1 * US + 22000, eth(tcp(http_get("example.com"), C, S, 52341, 80, 1001, 5001, PSH | ACK))))
+    body = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi"
+    p.append((1 * US + 60000, eth(tcp(body, S, C, 80, 52341, 5001, 1001 + len(http_get("example.com")), PSH | ACK))))
+
+    # 2. Genuine TLS -- identified as ssl, SNI extracted, allowed.
+    G = "142.250.183.14"
+    handshake(C, 52344, G, 443, 2 * US, cseq=2000, sseq=7000)
+    p.append((2 * US + 21000, eth(tcp(tls_client_hello("www.google.com"), C, G, 52344, 443, 2001, 7001, PSH | ACK))))
+
+    # 3. THE DEMO. SSH speaking on 443. Admitted by the port, then identified by
+    #    payload, re-judged against the application, and torn down.
+    X = "203.0.113.9"
+    handshake(C, 55000, X, 443, 3 * US, cseq=3000, sseq=9000)
+    p.append((3 * US + 24000, eth(tcp(SSH_BANNER, X, C, 443, 55000, 9001, 3001, PSH | ACK))))
+
+    # 4. DNS -- the one application still gated on a port, and honest about it.
+    p.append((4 * US, eth(udp(dns_query("www.example.com"), C, "8.8.8.8", 53122, 53))))
+    p.append((4 * US + 12000, eth(udp(dns_query("www.example.com") +
+                                      b"\xc0\x0c\x00\x01\x00\x01\x00\x00\x00\x3c\x00\x04\x5d\xb8\xd8\x22",
+                                      "8.8.8.8", C, 53, 53122))))
+
+    # 5. Telnet outbound -- matched by an explicit block rule, denied.
+    p.append((5 * US, eth(tcp(b"", "192.168.1.22", "198.51.100.7", 41000, 23, 4000, 0, SYN))))
+
+    # 6. Unsolicited inbound to SMB -- dropped silently rather than refused, so a
+    #    scanner learns nothing about whether the host exists.
+    p.append((6 * US, eth(tcp(b"", "203.0.113.44", C, 40000, 445, 6000, 0, SYN))))
+
+    # 7. A bare ACK for a conversation nobody saw open. No session, counted.
+    p.append((7 * US, eth(tcp(b"", C, S, 44444, 80, 9999, 1, ACK))))
+
+    # 8. A second web session, closed cleanly, so the table shows a CLOSED row
+    #    next to the live ones.
+    handshake(C, 52400, S, 80, 8 * US, cseq=1500, sseq=5500)
+    p.append((8 * US + 20000, eth(tcp(http_get("example.com"), C, S, 52400, 80, 1501, 5501, PSH | ACK))))
+    seq = 1501 + len(http_get("example.com"))
+    p.append((8 * US + 90000, eth(tcp(b"", C, S, 52400, 80, seq, 5501, FIN | ACK))))
+    p.append((8 * US + 95000, eth(tcp(b"", S, C, 80, 52400, 5501, seq + 1, FIN | ACK))))
+    p.append((8 * US + 99000, eth(tcp(b"", C, S, 52400, 80, seq + 1, 5502, ACK))))
+
+    return p
+
+
 def main() -> int:
     outdir = sys.argv[1] if len(sys.argv) > 1 else "captures"
     os.makedirs(outdir, exist_ok=True)
@@ -320,6 +383,7 @@ def main() -> int:
         "ssh_on_443":      f_ssh_on_443(),
         "bad_ip_checksum": f_bad_ip_checksum(),
         "non_ipv4":        f_non_ipv4(),
+        "demo":            f_demo(),
     }
     for name, packets in simple.items():
         write_pcap(os.path.join(outdir, name + ".pcap"), packets)

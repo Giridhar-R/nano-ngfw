@@ -5,6 +5,7 @@
 #include "cli.h"
 #include "engine.h"
 #include "pcap.h"
+#include "report.h"
 #include "version.h"
 
 namespace {
@@ -17,6 +18,7 @@ int usage() {
     std::printf("  --midstream        adopt sessions from non-SYN packets\n");
     std::printf("  --session <id>     print one session in detail\n");
     std::printf("  --stats-only       suppress the session table\n");
+    std::printf("  --html <file>      write a self-contained HTML session report\n");
     return 2;
 }
 
@@ -48,6 +50,7 @@ uint32_t parse_ip(const char* text) {
 int main(int argc, char** argv) {
     const char* path        = nullptr;
     const char* policy_path = nullptr;
+    const char* html_path   = nullptr;
     uint32_t    nat_ip      = 0;
     bool        midstream   = false;
     bool        stats_only  = false;
@@ -63,6 +66,8 @@ int main(int argc, char** argv) {
             policy_path = argv[++i];
         } else if (std::strcmp(arg, "--nat") == 0 && i + 1 < argc) {
             nat_ip = parse_ip(argv[++i]);
+        } else if (std::strcmp(arg, "--html") == 0 && i + 1 < argc) {
+            html_path = argv[++i];
         } else if (std::strcmp(arg, "--session") == 0 && i + 1 < argc) {
             detail_id = std::strtol(argv[++i], nullptr, 10);
         } else if (arg[0] == '-') {
@@ -101,6 +106,16 @@ int main(int argc, char** argv) {
         last = ts;
     }
     engine.finish(last);
+
+    if (html_path != nullptr) {
+        if (!nano::write_html_report(html_path, engine, path,
+                                     policy_path != nullptr ? policy_path : "")) {
+            std::fprintf(stderr, "nano-ngfw: cannot write %s\n", html_path);
+            return 1;
+        }
+        std::printf("wrote %s\n", html_path);
+        return 0;
+    }
 
     if (detail_id >= 0) {
         nano::print_session_detail(stdout, engine, static_cast<uint32_t>(detail_id));

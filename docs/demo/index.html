@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nano-ngfw session report</title>
+<style>
+  :root {
+    --bg:        #0b1014;
+    --panel:     #121a20;
+    --panel-2:   #16212a;
+    --line:      #22323d;
+    --text:      #d6e4ec;
+    --muted:     #6f8899;
+    --accent:    #35d6c4;
+    --accent-dim:#1d7f76;
+    --allow:     #3fb950;
+    --deny:      #f85149;
+    --drop:      #d29922;
+    --shift:     #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.55 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    padding: 32px 20px 64px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  header { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 26px; }
+  h1 { margin: 0; font-size: 19px; letter-spacing: .06em; font-weight: 600; }
+  h1 .dim { color: var(--accent); }
+  .meta { margin-top: 8px; color: var(--muted); font-size: 12.5px; }
+  .meta span { margin-right: 18px; white-space: nowrap; }
+  .meta b { color: var(--text); font-weight: 500; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+           gap: 10px; margin-bottom: 30px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+          padding: 12px 14px; }
+  .tile .n { font-size: 23px; font-weight: 600; letter-spacing: -.01em; }
+  .tile .k { color: var(--muted); font-size: 11px; text-transform: uppercase;
+             letter-spacing: .09em; margin-top: 3px; }
+  .tile.ok  .n { color: var(--allow); }
+  .tile.bad .n { color: var(--deny); }
+  .tile.hot .n { color: var(--shift); }
+
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .11em;
+       color: var(--muted); font-weight: 600; margin: 34px 0 12px; }
+
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; min-width: 900px; }
+  thead th { background: var(--panel-2); color: var(--muted); text-align: left;
+             font-weight: 600; font-size: 11px; text-transform: uppercase;
+             letter-spacing: .08em; padding: 9px 12px; white-space: nowrap;
+             border-bottom: 1px solid var(--line); }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid rgba(34,50,61,.55);
+             white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: rgba(53,214,196,.045); }
+  tr.shifted { background: rgba(188,140,255,.075); }
+  tr.shifted:hover { background: rgba(188,140,255,.11); }
+
+  .id { color: var(--muted); }
+  .app { color: var(--accent); font-weight: 600; }
+  .app.placeholder { color: var(--muted); font-weight: 400; font-style: italic; }
+  .zone { color: var(--muted); font-size: 12.5px; }
+
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px;
+           font-size: 11px; font-weight: 600; letter-spacing: .05em;
+           text-transform: uppercase; }
+  .badge.allow { color: var(--allow); background: rgba(63,185,80,.13);
+                 border: 1px solid rgba(63,185,80,.32); }
+  .badge.deny  { color: var(--deny);  background: rgba(248,81,73,.13);
+                 border: 1px solid rgba(248,81,73,.32); }
+  .badge.drop  { color: var(--drop);  background: rgba(210,153,34,.13);
+                 border: 1px solid rgba(210,153,34,.32); }
+  .flag { color: var(--shift); font-size: 11px; font-weight: 600;
+          letter-spacing: .05em; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+           gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 6px; padding: 15px 17px; }
+  .card.hot { border-color: rgba(188,140,255,.42); }
+  .card h3 { margin: 0 0 4px; font-size: 13px; letter-spacing: .04em; }
+  .card .why { color: var(--muted); font-size: 12px; margin: 0 0 12px;
+               line-height: 1.5; white-space: normal; }
+  .kv { display: grid; grid-template-columns: 86px 1fr; gap: 3px 12px; font-size: 12.5px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; overflow-wrap: anywhere; }
+
+  footer { margin-top: 42px; padding-top: 16px; border-top: 1px solid var(--line);
+           color: var(--muted); font-size: 11.5px; line-height: 1.7; }
+  footer code { color: var(--accent-dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>nano&#8209;ngfw <span class="dim">session report</span></h1>
+  <div class="meta"><span>capture <b>captures\demo.pcap</b></span><span>policy <b>rules\policy.conf</b></span><span>rules <b>4</b></span></div>
+</header>
+<div class="tiles">
+  <div class="tile "><div class="n">25</div><div class="k">packets</div></div>
+  <div class="tile "><div class="n">7</div><div class="k">sessions</div></div>
+  <div class="tile ok"><div class="n">4</div><div class="k">allowed</div></div>
+  <div class="tile bad"><div class="n">3</div><div class="k">denied / dropped</div></div>
+  <div class="tile hot"><div class="n">1</div><div class="k">app-id shifts</div></div>
+  <div class="tile bad"><div class="n">1</div><div class="k">out of state</div></div>
+  <div class="tile "><div class="n">0</div><div class="k">malformed</div></div>
+</div>
+<h2>Session browser</h2>
+<div class="scroll"><table>
+<thead><tr><th>ID</th><th>Application</th><th>From</th><th>To</th><th>Source</th><th>Destination</th><th>State</th><th>Rule</th><th>Action</th><th></th></tr></thead>
+<tbody>
+<tr><td class="id">0</td><td class="app">web-browsing</td><td class="zone">trust</td><td class="zone">untrust</td><td>192.168.1.10:52341</td><td>93.184.216.34:80</td><td class="zone">ESTABLISHED</td><td class="zone">allow-web</td><td><span class="badge allow">allow</span></td><td></td></tr>
+<tr><td class="id">1</td><td class="app">ssl</td><td class="zone">trust</td><td class="zone">untrust</td><td>192.168.1.10:52344</td><td>142.250.183.14:443</td><td class="zone">ESTABLISHED</td><td class="zone">allow-web</td><td><span class="badge allow">allow</span></td><td></td></tr>
+<tr class="shifted"><td class="id">2</td><td class="app">ssh</td><td class="zone">trust</td><td class="zone">untrust</td><td>192.168.1.10:55000</td><td>203.0.113.9:443</td><td class="zone">CLOSED</td><td class="zone">default deny</td><td><span class="badge deny">deny</span></td><td><span class="flag">APP-ID SHIFT</span></td></tr>
+<tr><td class="id">3</td><td class="app">dns</td><td class="zone">trust</td><td class="zone">untrust</td><td>192.168.1.10:53122</td><td>8.8.8.8:53</td><td class="zone">ESTABLISHED</td><td class="zone">allow-dns</td><td><span class="badge allow">allow</span></td><td></td></tr>
+<tr><td class="id">4</td><td class="app placeholder">incomplete</td><td class="zone">trust</td><td class="zone">untrust</td><td>192.168.1.22:41000</td><td>198.51.100.7:23</td><td class="zone">SYN-SEEN</td><td class="zone">block-telnet</td><td><span class="badge deny">deny</span></td><td></td></tr>
+<tr><td class="id">5</td><td class="app placeholder">incomplete</td><td class="zone">untrust</td><td class="zone">trust</td><td>203.0.113.44:40000</td><td>192.168.1.10:445</td><td class="zone">SYN-SEEN</td><td class="zone">deny-inbound</td><td><span class="badge drop">drop</span></td><td></td></tr>
+<tr><td class="id">6</td><td class="app">web-browsing</td><td class="zone">trust</td><td class="zone">untrust</td><td>192.168.1.10:52400</td><td>93.184.216.34:80</td><td class="zone">CLOSED</td><td class="zone">allow-web</td><td><span class="badge allow">allow</span></td><td></td></tr>
+</tbody>
+</table></div>
+<h2>Sessions worth a second look</h2>
+<div class="cards">
+  <div class="card">
+    <h3>Session 1 &middot; ssl</h3>
+    <p class="why">Identified by payload rather than port. The server name is readable because it travels in the clear in the TLS ClientHello, before encryption begins.</p>
+    <dl class="kv">
+      <dt>protocol</dt><dd>tcp</dd>
+      <dt>initiator</dt><dd>192.168.1.10:52344 (trust)</dd>
+      <dt>responder</dt><dd>142.250.183.14:443 (untrust)</dd>
+      <dt>sni</dt><dd>www.google.com</dd>
+      <dt>nat</dt><dd>203.0.113.5:40001 (source PAT)</dd>
+      <dt>state</dt><dd>ESTABLISHED</dd>
+      <dt>rule</dt><dd>allow-web</dd>
+      <dt>action</dt><dd><span class="badge allow">allow</span></dd>
+      <dt>traffic</dt><dd>3 &rarr; / 1 &larr; packets, 291 bytes</dd>
+    </dl>
+  </div>
+  <div class="card hot">
+    <h3>Session 2 &middot; ssh</h3>
+    <p class="why">Admitted on its first packet, when the only thing known about it was a destination port. Once the payload arrived, App-ID identified it as <b>ssh</b>, policy was evaluated a second time against the application, and the session lost the rule that had admitted it.</p>
+    <dl class="kv">
+      <dt>protocol</dt><dd>tcp</dd>
+      <dt>initiator</dt><dd>192.168.1.10:55000 (trust)</dd>
+      <dt>responder</dt><dd>203.0.113.9:443 (untrust)</dd>
+      <dt>nat</dt><dd>203.0.113.5:40002 (source PAT)</dd>
+      <dt>state</dt><dd>CLOSED</dd>
+      <dt>rule</dt><dd>implicit default deny</dd>
+      <dt>action</dt><dd><span class="badge deny">deny</span></dd>
+      <dt>traffic</dt><dd>2 &rarr; / 2 &larr; packets, 239 bytes</dd>
+    </dl>
+  </div>
+</div>
+<footer>
+Generated by <code>nano-ngfw --html</code>. Static: one rendering of one replay, with no server behind it and no script in the page.<br>
+Every timestamp derives from the capture rather than a wall clock, so re-running the same file reproduces this report byte for byte.
+</footer>
+</div>
+</body>
+</html>

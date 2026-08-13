@@ -59,6 +59,24 @@ Both pairs are committed as golden files, so neither claim can quietly stop bein
 
 ---
 
+## Session report
+
+`--html` writes a self-contained report — the management view a firewall is
+normally administered through, at 1/1000 scale. One file, inline CSS, no server, no script,
+no fetch.
+
+```bash
+./build/nano-ngfw --policy rules/policy.conf --nat 203.0.113.5 --html report.html captures/demo.pcap
+```
+
+`captures/demo.pcap` is built to have a story: eight conversations covering every verdict, an
+App-ID shift tearing down a session admitted by port, and an out-of-state packet refused for
+belonging to no session at all. A committed rendering lives at
+[`docs/demo/index.html`](docs/demo/index.html).
+
+Because the clock comes from the capture rather than a wall clock, re-running the same file
+reproduces the report byte for byte.
+
 ## Pipeline
 
 ```

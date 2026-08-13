@@ -59,6 +59,7 @@ add_library(nano_core STATIC
     src/nat.cpp
     src/pcap.cpp
     src/policy.cpp
+    src/report.cpp
     src/tcp_state.cpp
     src/version.cpp)
 
